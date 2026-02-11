@@ -1,0 +1,37 @@
+# Secrets and configs
+.env
+.env.local
+.env.*.local
+config.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# Local settings
+.qwen/

@@ -1,0 +1,17 @@
+services:
+  bot:
+    build: .
+    container_name: telegram-acrcloud-bot
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - CODE_WORD=${CODE_WORD:-music123}
+      - ACR_HOST=${ACR_HOST:-identify-us-west-2.acrcloud.com}
+      - ACR_ACCESS_KEY=${ACR_ACCESS_KEY}
+      - ACR_ACCESS_SECRET=${ACR_ACCESS_SECRET}
+      - SUPPORTED_FORMATS=${SUPPORTED_FORMATS:-.mp3,.wav,.flac,.m4a,.mp4,.avi,.mkv,.mov,.ogg,.aac,.wma}
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-20971520}
+    env_file:
+      - .env
