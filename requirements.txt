@@ -1,4 +1,4 @@
 python-telegram-bot>=20.0
-acrcloud_extr_tools>=1.0.0
+acrcloud==2.0
 PyYAML>=6.0
 python-dotenv>=1.0.0

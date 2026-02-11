@@ -19,7 +19,7 @@ from telegram.ext import (
     filters,
 )
 
-from acrcloud.extrtools import recognize
+from acrcloud import ACRcloud
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -104,20 +104,38 @@ class ACRMusicRecognizer:
 
     def __init__(self, config: Config):
         self.config = config
+        self.client = self._create_client()
+
+    def _create_client(self) -> ACRcloud:
+        """Create ACRCloud client."""
+        client_config = {
+            'host': self.config.acr_host,
+            'key': self.config.acr_access_key,
+            'secret': self.config.acr_access_secret,
+        }
+        return ACRcloud(client_config)
 
     def recognize(self, file_path: str) -> dict:
         """Recognize music from audio/video file."""
         try:
-            result = recognize(
-                host=self.config.acr_host,
-                access_key=self.config.acr_access_key,
-                access_secret=self.config.acr_access_secret,
-                audio_file_path=file_path,
-            )
+            result = self.client.recognizer(file_path)
             return result
         except Exception as e:
             logger.error(f"Recognition error: {e}")
             return {"status": {"msg": "Error", "code": 500}, "error": str(e)}
+
+    def _fix_encoding(self, text: str) -> str:
+        """Fix common encoding issues with Cyrillic/special characters."""
+        if not text:
+            return text
+        try:
+            # If text appears to be double-encoded UTF-8 (common with some APIs)
+            if "Ð" in text or "Ñ" in text:
+                # Try to decode as Latin-1 then re-encode as UTF-8
+                return text.encode("latin-1", errors="ignore").decode("utf-8", errors="ignore")
+        except Exception:
+            pass
+        return text
 
     def format_result(self, result: dict) -> str:
         """Format recognition result for display."""
@@ -134,28 +152,46 @@ class ACRMusicRecognizer:
             return "❌ No music found in the file."
 
         track = music_info[0]
-        output = []
 
-        if track.get("title"):
-            output.append(f"🎵 *{track['title']}*")
+        title = self._fix_encoding(track.get("title", ""))
 
+        artists = []
         if track.get("artists"):
-            artists = ", ".join(a.get("name", "") for a in track["artists"])
-            if artists:
-                output.append(f"👤 *Artist:* {artists}")
+            artists = [self._fix_encoding(a.get("name", "")) for a in track["artists"]]
+        artist_str = ", ".join(artists)
 
+        album = ""
         if track.get("album"):
-            output.append(f"💿 *Album:* {track['album'].get('name', 'Unknown')}")
+            album = self._fix_encoding(track["album"].get("name", ""))
 
-        if track.get("release_date"):
-            output.append(f"📅 *Released:* {track['release_date']}")
+        release_date = track.get("release_date", "")
 
+        genres = []
         if metadata.get("genres"):
-            genres = ", ".join(g.get("name", "") for g in metadata["genres"])
-            if genres:
-                output.append(f"🏷️ *Genre:* {genres}")
+            genres = [self._fix_encoding(g.get("name", "")) for g in metadata["genres"]]
+        genre_str = ", ".join(genres)
 
-        return "\n".join(output) if output else "❌ Could not identify the track."
+        # Build single line output: Title by Artist (Album • 2024) [Genre]
+        parts = []
+
+        if title:
+            parts.append(title)
+
+        if artist_str:
+            parts.append(f"by {artist_str}")
+
+        album_parts = []
+        if album:
+            album_parts.append(album)
+        if release_date:
+            album_parts.append(release_date)
+        if album_parts:
+            parts.append(f"({' • '.join(album_parts)})")
+
+        if genre_str:
+            parts.append(f"[{genre_str}]")
+
+        return " ".join(parts) if parts else "❌ Could not identify the track."
 
     def extract_audio_from_video(self, video_path: str) -> str:
         """Extract audio from video file using ffmpeg."""
@@ -169,7 +205,7 @@ class ACRMusicRecognizer:
                     "-vn",
                     "-acodec", "libopus",
                     "-b:a", "128k",
-                    "-ar", "44100",
+                    "-ar", "48000",
                     audio_path
                 ],
                 check=True,
@@ -199,9 +235,17 @@ class ACRMusicRecognizer:
             duration = float(duration_result.stdout.strip())
 
             if duration <= 10:
-                # Audio is already 10 seconds or less, just copy it
+                # Audio is already 10 seconds or less, convert to OGG/Opus
                 subprocess.run(
-                    ["ffmpeg", "-y", "-i", audio_path, "-c", "copy", trimmed_path],
+                    [
+                        "ffmpeg", "-y",
+                        "-i", audio_path,
+                        "-vn",
+                        "-acodec", "libopus",
+                        "-b:a", "128k",
+                        "-ar", "48000",
+                        trimmed_path
+                    ],
                     check=True,
                     capture_output=True
                 )
@@ -214,7 +258,10 @@ class ACRMusicRecognizer:
                         "-ss", str(start_time),
                         "-i", audio_path,
                         "-t", "10",
-                        "-c", "copy",
+                        "-vn",
+                        "-acodec", "libopus",
+                        "-b:a", "128k",
+                        "-ar", "48000",
                         trimmed_path
                     ],
                     check=True,

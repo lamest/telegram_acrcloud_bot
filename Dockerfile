@@ -21,8 +21,5 @@ VOLUME ["/app/config"]
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Expose port (if needed for future HTTP features)
-EXPOSE 8080
-
 # Run the bot
 CMD ["python", "bot.py"]
